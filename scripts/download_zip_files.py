@@ -10,7 +10,6 @@ from the following links:
 
 import sys
 from pathlib import Path
-import os
 import argparse
 
 # Add the string directly of AAI-590-OCR-Master for proper src imports
