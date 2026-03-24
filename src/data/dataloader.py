@@ -27,7 +27,7 @@ def get_dataloaders_text_detection(
         - data_path (Path): Pathlib path where data folder is located
         - batch_size (int): Number of samples per batch in the Dataloaders
         - dataset_name (str): Name of the subset dataset that will be used for all training.
-        - mask_type (str): = "binary-text",
+        - mask_type (str): "binary-text" for binary masks, " semantic-layout" for PDF semantic layout masks.
         - num_workers (int) = 0: Number of workers per Dataloader, use os.cpu_count() when adding them
         - pin_memory (bool) = False: Boolean flag to pin torch.Tensors inside the batches to specific memory, normally set to False.
         - new_height (int) = 1024: Integer value that sets the new dimensions of the new height, default is 1024
