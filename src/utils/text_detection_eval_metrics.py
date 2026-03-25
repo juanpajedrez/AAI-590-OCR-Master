@@ -159,8 +159,8 @@ def binary_region_metrics(
     dice = (2. * intersection + smooth) / (union + smooth)
     
     compute_metrics = {
-        "IoU_region": intersection.mean() / union.mean(),
-        "DsC_region": 1 - dice.mean()
+        "IoU_region": (intersection / (union - intersection + smooth)).mean(),
+        "DsC_region": dice.mean()
     }
 
     # Return Dice Loss
@@ -174,41 +174,49 @@ def multiclass_region_metrics(
     """
     Computes Dice Loss for multi-class segmentation.
     Args:
-        pred: Tensor of predictions (batch_size, C, H, W).
-        target: One-hot encoded ground truth (batch_size, C, H, W).
+        logits: Tensor of predictions (batch_size, C, H, W).
+        targets: Class-index ground truth (batch_size, H, W) or one-hot (batch_size, C, H, W).
         smooth: Smoothing factor.
     Returns:
         Scalar Dice Loss.
     """
     pred = F.softmax(logits, dim=1)  # Convert logits to probabilities
     num_classes = pred.shape[1]  # Number of classes (C)
-    dice = 0  # Initialize Dice loss accumulator
+
+    # Convert class-index targets to one-hot if needed
+    if targets.dim() == 3:  # B x H x W -> B x C x H x W
+        targets = F.one_hot(targets, num_classes=num_classes).permute(0, 3, 1, 2).float()
+
+    dice = 0
     iou = 0
-    
+
     if ignore_background:
         classes = range(1, num_classes) # class 0 is background, so we ignore it
     else:
-        classes = range(num_classes) 
+        classes = range(num_classes)
 
     compute_metrics = {}
 
     for c in classes:  # Loop through each class
         pred_c = pred[:, c]  # Predictions for class c
         target_c = targets[:, c]  # Ground truth for class c
-        
+
         intersection : torch.Tensor = (pred_c * target_c).sum(dim=(1, 2))  # Element-wise multiplication
         union : torch.Tensor = pred_c.sum(dim=(1, 2)) + target_c.sum(dim=(1, 2))  # Sum of all pixels
-        iou += intersection / union
 
-        compute_metrics["IoU_class_" + str(c)] = iou
+        iou_c = intersection / (union - intersection + smooth)
+        compute_metrics["IoU_class_" + str(c)] = iou_c
+        iou += iou_c
+
         dice_c = (2. * intersection + smooth) / (union + smooth)
         compute_metrics["DsC_class_"+ str(c)] = dice_c
-        dice += (2. * intersection + smooth) / (union + smooth)  # Per-class Dice score
+        dice += dice_c
 
-    compute_metrics["IoU_region"] = iou / num_classes
-    compute_metrics["DsC_region"] = dice / num_classes
+    num_active = len(list(classes))
+    compute_metrics["IoU_region"] = iou / num_active
+    compute_metrics["DsC_region"] = dice / num_active
 
-    # Return Dice Loss
+    # Return metrics
     return compute_metrics
 
 def get_region_metrics(
