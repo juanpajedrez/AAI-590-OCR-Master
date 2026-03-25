@@ -56,8 +56,8 @@ def get_binary_metrics(
         "precision": precision.item(),
         "recall": recall.item(),
         "f1_score": f1.item(),
-        "iou": iou.item(),
-        "dice": dice.item(),
+        "iou_pixel": iou.item(),
+        "dice_pixel": dice.item(),
     }
 
 
@@ -121,8 +121,8 @@ def get_semantic_metrics(
         "precision": precision.item(),
         "recall": recall.item(),
         "f1_score": f1.item(),
-        "iou": iou.item(),
-        "dice": dice.item(),
+        "iou_pixel": iou.item(),
+        "dice_pixel": dice.item(),
     }
 
 
@@ -159,8 +159,8 @@ def binary_region_metrics(
     dice = (2. * intersection + smooth) / (union + smooth)
     
     compute_metrics = {
-        "IoU": intersection.mean() / union.mean(),
-        "DsC": 1 - dice.mean()
+        "IoU_region": intersection.mean() / union.mean(),
+        "DsC_region": 1 - dice.mean()
     }
 
     # Return Dice Loss
@@ -205,8 +205,8 @@ def multiclass_region_metrics(
         compute_metrics["DsC_class_"+ str(c)] = dice_c
         dice += (2. * intersection + smooth) / (union + smooth)  # Per-class Dice score
 
-    compute_metrics["IoU"] = iou / num_classes
-    compute_metrics["DsC"] = dice / num_classes
+    compute_metrics["IoU_region"] = iou / num_classes
+    compute_metrics["DsC_region"] = dice / num_classes
 
     # Return Dice Loss
     return compute_metrics
