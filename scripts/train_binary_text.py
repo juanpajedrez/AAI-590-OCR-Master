@@ -166,7 +166,7 @@ if __name__ == "__main__":
         optimizer=optimizer,
         loss_fn=loss_fn,
         simulate_batch_size=args.batch_size,
-        simulate_new_channels=1,
+        simulate_new_channels=3,
         simulate_new_height=args.new_height,
         simulate_new_width=args.new_width,
         epochs=args.epochs,
