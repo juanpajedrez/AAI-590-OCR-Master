@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.data import get_dataloaders_text_detection
 from src.models import LinknetModel
 from src.utils import MetadataRetriever
-from src.training import DiceLoss, train, create_writer, add_hparams_to_writer
+from src.training import DiceLoss, train, create_writer, add_hparams_to_writer, save_model
 
 
 def set_seeds(seed: int = 42) -> None:
@@ -104,6 +104,16 @@ if __name__ == "__main__":
                         type=str,
                         default="DocLayNet_text_detection",
                         help="TensorBoard experiment label (default: DocLayNet_text_detection)")
+
+    # --- Model saving arguments ---
+    parser.add_argument("--target_dir",
+                        type=str,
+                        default="models",
+                        help="directory to save the trained model (default: models)")
+    parser.add_argument("--model_name",
+                        type=str,
+                        default="linknet_semantic_layout.pth",
+                        help="filename for the saved model, must end in .pth or .pt (default: linknet_semantic_layout.pth)")
 
     args = parser.parse_args()
     ignore_background = not args.no_ignore_background
@@ -197,6 +207,15 @@ if __name__ == "__main__":
         num_workers=args.num_workers,
         pin_memory=args.pin_memory,
         results=results,
+    )
+
+    # ------------------------------------------------------------------ #
+    #  Save model                                                          #
+    # ------------------------------------------------------------------ #
+    save_model(
+        model=model,
+        target_dir=args.target_dir,
+        model_name=args.model_name,
     )
 
     print("[INFO] Semantic PDF layout segmentation training complete.")
