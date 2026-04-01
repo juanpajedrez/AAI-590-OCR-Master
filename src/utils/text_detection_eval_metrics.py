@@ -170,7 +170,7 @@ def multiclass_soft_metrics(
         logits : torch.Tensor,
         targets : torch.Tensor,
         ignore_background:bool = False,
-        smooth : Union[int, float] = 1e-7):
+        smooth : Union[int, float] = 1e-15):
     """
     Computes Dice Loss for multi-class segmentation.
     Args:
@@ -204,7 +204,7 @@ def multiclass_soft_metrics(
         intersection : torch.Tensor = (pred_c * target_c).sum(dim=(1, 2))  # Element-wise multiplication
         union : torch.Tensor = pred_c.sum(dim=(1, 2)) + target_c.sum(dim=(1, 2))  # Sum of all pixels
 
-        iou_c = (intersection / (union - intersection + smooth)).mean()
+        iou_c = ((intersection + smooth) / (union - intersection + smooth)).mean()
         compute_metrics["IoU_class_" + str(c)] = iou_c
         iou += iou_c
 
@@ -222,7 +222,7 @@ def multiclass_soft_metrics(
 def get_soft_metrics(
     logits: torch.Tensor,
     targets: torch.Tensor,
-    smooth: Union[int, float] = 1e-7,
+    smooth: Union[int, float] = 1e-15,
     is_binary: bool = True,
     ignore_background: bool = False,
 ) -> Dict[str, float]:

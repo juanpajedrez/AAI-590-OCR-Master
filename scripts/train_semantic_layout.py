@@ -73,6 +73,24 @@ if __name__ == "__main__":
                         default=False,
                         help="enable pinned memory in dataloaders (default: False)")
 
+    # --- Augmentation arguments ---
+    parser.add_argument("--jitter_brightness",
+                        type=float,
+                        default=0.2,
+                        help="ColorJitter brightness factor for training transform (default: 0.2)")
+    parser.add_argument("--jitter_contrast",
+                        type=float,
+                        default=0.2,
+                        help="ColorJitter contrast factor for training transform (default: 0.2)")
+    parser.add_argument("--jitter_saturation",
+                        type=float,
+                        default=0.2,
+                        help="ColorJitter saturation factor for training transform (default: 0.2)")
+    parser.add_argument("--jitter_hue",
+                        type=float,
+                        default=0.1,
+                        help="ColorJitter hue factor for training transform (default: 0.1)")
+
     # --- Training arguments ---
     parser.add_argument("--epochs",
                         type=int,
@@ -152,7 +170,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------ #
     #  Dataloaders                                                         #
     # ------------------------------------------------------------------ #
-    print("[INFO] Loading semantic-layout dataloaders...")
+    print("[INFO] Loading semantic-layout dataloaders (auto-computing training mean/std)...")
     train_dl, val_dl, test_dl = get_dataloaders_text_detection(
         data_path=data_path,
         dataset_name=args.dataset_name,
@@ -162,7 +180,10 @@ if __name__ == "__main__":
         pin_memory=args.pin_memory,
         new_height=args.new_height,
         new_width=args.new_width,
-        transform=None,
+        jitter_brightness=args.jitter_brightness,
+        jitter_contrast=args.jitter_contrast,
+        jitter_saturation=args.jitter_saturation,
+        jitter_hue=args.jitter_hue,
     )
 
     # ------------------------------------------------------------------ #
