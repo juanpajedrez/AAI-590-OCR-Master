@@ -6,6 +6,7 @@ Script that trains a LinkNet model for semantic PDF layout segmentation on DocLa
 Usage example:
     python scripts/train_semantic_layout.py
     python scripts/train_semantic_layout.py --epochs 10 --lr 5e-4 --batch_size 16
+    python scripts/train_semantic_layout.py --weight_ce 1.0 --weight_dice 0.5
     python scripts/train_semantic_layout.py --dataset_name my_subsample --no_ignore_background
 '''
 
@@ -21,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.data import get_dataloaders_text_detection
 from src.models import LinknetModel
 from src.utils import MetadataRetriever
-from src.training import DiceLoss, train, create_writer, add_hparams_to_writer, save_model
+from src.training import CombinedLoss, train, create_writer, add_hparams_to_writer, save_model
 
 
 def set_seeds(seed: int = 42) -> None:
@@ -85,6 +86,14 @@ if __name__ == "__main__":
                         type=float,
                         default=1e-7,
                         help="smoothing factor for DiceLoss (default: 1e-7)")
+    parser.add_argument("--weight_ce",
+                        type=float,
+                        default=1.0,
+                        help="weight for CE loss in CombinedLoss (default: 1.0)")
+    parser.add_argument("--weight_dice",
+                        type=float,
+                        default=0.5,
+                        help="weight for Dice loss in CombinedLoss (default: 0.5)")
     parser.add_argument("--reduction",
                         type=str,
                         default="macro",
@@ -162,7 +171,7 @@ if __name__ == "__main__":
     print(f"[INFO] Building LinkNet model (N={num_classes} for semantic segmentation)...")
     model = LinknetModel(Cin=3, N=num_classes).to(device)
 
-    loss_fn = DiceLoss(smooth=args.smooth, ignore_background=ignore_background)
+    loss_fn = CombinedLoss(binary=False, weight_ce=args.weight_ce, weight_dice=args.weight_dice, ignore_background=ignore_background)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # ------------------------------------------------------------------ #
@@ -181,7 +190,7 @@ if __name__ == "__main__":
     results = train(
         model=model,
         train_dataloader=train_dl,
-        test_dataloader=test_dl,
+        test_dataloader=val_dl,
         optimizer=optimizer,
         loss_fn=loss_fn,
         simulate_batch_size=args.batch_size,

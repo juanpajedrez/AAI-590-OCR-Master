@@ -54,3 +54,72 @@ class DiceLoss(nn.Module):
             union = probs.sum(dim=(2,3)) + targets.sum(dim=(2,3))
             dice = (2 * intersection + self.smooth) / (union + self.smooth)
             return 1 - dice.mean()
+
+
+class CombinedLoss(nn.Module):
+    """
+    Combined loss for segmentation:
+        - Binary: BCEWithLogits + Dice
+        - Multi-class: CrossEntropy + Dice
+    """
+
+    def __init__(
+        self,
+        binary: bool = True,
+        weight_ce: float = 0.5,
+        weight_dice: float = 0.5,
+        ignore_background: bool = False
+    ):
+        """
+        Args:
+            - binary (bool): whether task is binary segmentation
+            - weight_ce (float): weight for CE/BCE loss
+            - weight_dice (float): weight for Dice loss
+            - ignore_background (bool): ignore class 0 in Dice (multi-class only)
+        """
+        super().__init__()
+
+        self.binary = binary
+        self.weight_ce = weight_ce
+        self.weight_dice = weight_dice
+
+        # Loss components
+        if self.binary:
+            self.ce_loss = nn.BCEWithLogitsLoss()
+        else:
+            self.ce_loss = nn.CrossEntropyLoss()
+
+        self.dice_loss = DiceLoss(ignore_background=ignore_background)
+
+    def forward(self, preds: torch.Tensor, targets: torch.Tensor):
+        """
+        Args:
+            preds: B x C x H x W (logits)
+            targets:
+                - Binary: B x 1 x H x W or B x H x W
+                - Multi-class: B x H x W (class indices)
+
+        Returns:
+            combined loss (scalar)
+        """
+
+        # ---- CE / BCE LOSS ----
+        if self.binary:
+            # Ensure same shape
+            if targets.dim() == 3:
+                targets = targets.unsqueeze(1)  # B x 1 x H x W
+            targets = targets.float()
+
+            ce = self.ce_loss(preds, targets)
+
+        else:
+            # CrossEntropy expects class indices (no one-hot)
+            ce = self.ce_loss(preds, targets.long())
+
+        # ---- DICE LOSS ----
+        dice = self.dice_loss(preds, targets)
+
+        # ---- COMBINED ----
+        loss = self.weight_ce * ce + self.weight_dice * dice
+
+        return loss

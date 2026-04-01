@@ -6,6 +6,7 @@ Script that trains a LinkNet model for binary text segmentation on DocLayNet dat
 Usage example:
     python scripts/train_binary_text.py
     python scripts/train_binary_text.py --epochs 10 --lr 5e-4 --batch_size 16
+    python scripts/train_binary_text.py --weight_ce 1.0 --weight_dice 0.5
     python scripts/train_binary_text.py --dataset_name my_subsample --epochs 20 --reduction micro
 '''
 
@@ -20,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data import get_dataloaders_text_detection
 from src.models import LinknetModel
-from src.training import DiceLoss, train, create_writer, add_hparams_to_writer, save_model
+from src.training import CombinedLoss, train, create_writer, add_hparams_to_writer, save_model
 
 
 def set_seeds(seed: int = 42) -> None:
@@ -84,6 +85,14 @@ if __name__ == "__main__":
                         type=float,
                         default=1e-7,
                         help="smoothing factor for DiceLoss (default: 1e-7)")
+    parser.add_argument("--weight_ce",
+                        type=float,
+                        default=1.0,
+                        help="weight for BCE loss in CombinedLoss (default: 1.0)")
+    parser.add_argument("--weight_dice",
+                        type=float,
+                        default=0.5,
+                        help="weight for Dice loss in CombinedLoss (default: 0.5)")
     parser.add_argument("--reduction",
                         type=str,
                         default="macro",
@@ -143,7 +152,7 @@ if __name__ == "__main__":
     print("[INFO] Building LinkNet model (N=1 for binary segmentation)...")
     model = LinknetModel(Cin=3, N=1).to(device)
 
-    loss_fn = DiceLoss(smooth=args.smooth, ignore_background=False)
+    loss_fn = CombinedLoss(binary=True, weight_ce=args.weight_ce, weight_dice=args.weight_dice)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # ------------------------------------------------------------------ #
@@ -162,7 +171,7 @@ if __name__ == "__main__":
     results = train(
         model=model,
         train_dataloader=train_dl,
-        test_dataloader=test_dl,
+        test_dataloader=val_dl,
         optimizer=optimizer,
         loss_fn=loss_fn,
         simulate_batch_size=args.batch_size,

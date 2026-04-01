@@ -12,7 +12,7 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 
-from src.utils import get_binary_metrics, get_semantic_metrics, get_region_metrics
+from src.utils import get_binary_metrics, get_semantic_metrics, get_soft_metrics
 
 
 def train_step(model: torch.nn.Module,
@@ -66,7 +66,7 @@ def train_step(model: torch.nn.Module,
         with torch.no_grad():
             if binary:
                 pixel_metrics = get_binary_metrics(X_logits, X_masks)
-                region_metrics = get_region_metrics(X_logits, X_masks, is_binary=True)
+                region_metrics = get_soft_metrics(X_logits, X_masks, is_binary=True)
             else:
                 pixel_metrics = get_semantic_metrics(
                     logits=X_logits,
@@ -75,7 +75,7 @@ def train_step(model: torch.nn.Module,
                     ignore_background=ignore_background,
                     reduction=reduction
                 )
-                region_metrics = get_region_metrics(X_logits, X_masks, is_binary=False)
+                region_metrics = get_soft_metrics(X_logits, X_masks, is_binary=False)
 
             for k, v in pixel_metrics.items():
                 total_metrics[k] += float(v)
@@ -130,7 +130,7 @@ def test_step(model: torch.nn.Module,
 
             if binary:
                 pixel_metrics = get_binary_metrics(X_logits, X_masks)
-                region_metrics = get_region_metrics(X_logits, X_masks, is_binary=True)
+                region_metrics = get_soft_metrics(X_logits, X_masks, is_binary=True)
             else:
                 pixel_metrics = get_semantic_metrics(
                     logits=X_logits,
@@ -139,7 +139,7 @@ def test_step(model: torch.nn.Module,
                     ignore_background=ignore_background,
                     reduction=reduction
                 )
-                region_metrics = get_region_metrics(X_logits, X_masks, is_binary=False)
+                region_metrics = get_soft_metrics(X_logits, X_masks, is_binary=False)
 
             for k, v in pixel_metrics.items():
                 total_metrics[k] += float(v)

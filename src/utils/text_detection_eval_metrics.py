@@ -134,7 +134,7 @@ import torch
 import torch.nn.functional as F
 from typing import Union
 
-def binary_region_metrics(
+def binary_soft_metrics(
     logits:torch.Tensor,
     targets:torch.Tensor,
     smooth: Union[int, float] = 1e-7):
@@ -166,7 +166,7 @@ def binary_region_metrics(
     # Return Dice Loss
     return compute_metrics
 
-def multiclass_region_metrics(
+def multiclass_soft_metrics(
         logits : torch.Tensor,
         targets : torch.Tensor,
         ignore_background:bool = False,
@@ -204,11 +204,11 @@ def multiclass_region_metrics(
         intersection : torch.Tensor = (pred_c * target_c).sum(dim=(1, 2))  # Element-wise multiplication
         union : torch.Tensor = pred_c.sum(dim=(1, 2)) + target_c.sum(dim=(1, 2))  # Sum of all pixels
 
-        iou_c = intersection / (union - intersection + smooth)
+        iou_c = (intersection / (union - intersection + smooth)).mean()
         compute_metrics["IoU_class_" + str(c)] = iou_c
         iou += iou_c
 
-        dice_c = (2. * intersection + smooth) / (union + smooth)
+        dice_c = ((2. * intersection + smooth) / (union + smooth)).mean()
         compute_metrics["DsC_class_"+ str(c)] = dice_c
         dice += dice_c
 
@@ -219,7 +219,7 @@ def multiclass_region_metrics(
     # Return metrics
     return compute_metrics
 
-def get_region_metrics(
+def get_soft_metrics(
     logits: torch.Tensor,
     targets: torch.Tensor,
     smooth: Union[int, float] = 1e-7,
@@ -227,7 +227,7 @@ def get_region_metrics(
     ignore_background: bool = False,
 ) -> Dict[str, float]:
     """
-    Region-level (connected-component) precision, recall, and F1.
+    Soft-Metrics IoU, DsC for Binary and Semantic classifications.
 
     Binary mode  (is_binary=True):
         Applies sigmoid + threshold to logits (B x 1 x H x W), extracts connected
@@ -252,12 +252,12 @@ def get_region_metrics(
     """
 
     if is_binary:
-        binary_metrics = binary_region_metrics(logits=logits,
+        binary_metrics = binary_soft_metrics(logits=logits,
                                                targets=targets,
                                                smooth=smooth)
         return binary_metrics
     else:
-        multiclass_metrics = multiclass_region_metrics(logits=logits,
+        multiclass_metrics = multiclass_soft_metrics(logits=logits,
                                                        targets=targets,
                                                        ignore_background=ignore_background,
                                                        smooth=smooth,
