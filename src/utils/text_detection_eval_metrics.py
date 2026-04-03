@@ -40,15 +40,19 @@ def get_binary_metrics(
     tn = torch.sum((preds == 0) & (targets == 0)).float()
 
     if (tp + fp + fn) == 0:
-        iou = torch.tensor(1.0)
-        dice = torch.tensor(1.0)
+        # No foreground in either GT or prediction — perfect true-negative result
+        iou       = torch.tensor(1.0)
+        dice      = torch.tensor(1.0)
+        precision = torch.tensor(1.0)
+        recall    = torch.tensor(1.0)
+        f1        = torch.tensor(1.0)
     else:
-        iou = tp / (tp + fp + fn + EPS)
-        dice = (2 * tp) / (2 * tp + fp + fn + EPS)
+        iou       = tp / (tp + fp + fn + EPS)
+        dice      = (2 * tp) / (2 * tp + fp + fn + EPS)
+        precision = tp / (tp + fp + EPS)
+        recall    = tp / (tp + fn + EPS)
+        f1        = (2 * precision * recall) / (precision + recall + EPS)
 
-    precision = tp / (tp + fp + EPS)
-    recall = tp / (tp + fn + EPS)
-    f1 = (2 * precision * recall) / (precision + recall + EPS)
     accuracy = (tp + tn) / (tp + tn + fp + fn + EPS)
 
     return {
@@ -109,11 +113,26 @@ def get_semantic_metrics(
         recall = tp / (tp + fn + EPS)
 
     else:
-        iou = torch.mean(tps / (tps + fps + fns + EPS))
-        dice = torch.mean((2 * tps) / (2 * tps + fps + fns + EPS))
+        # Only average over classes that have at least one pixel in pred OR target.
+        # Classes absent from both (tp=fp=fn=0) are true negatives and should not
+        # count as IoU=0, which would artificially deflate the macro average.
+        support_mask = (tps + fps + fns) > 0
 
-        precision = torch.mean(tps / (tps + fps + EPS))
-        recall = torch.mean(tps / (tps + fns + EPS))
+        if support_mask.sum() == 0:
+            # No active class in this sample — perfect by convention
+            iou       = torch.tensor(1.0)
+            dice      = torch.tensor(1.0)
+            precision = torch.tensor(1.0)
+            recall    = torch.tensor(1.0)
+        else:
+            tps_a = tps[support_mask]
+            fps_a = fps[support_mask]
+            fns_a = fns[support_mask]
+
+            iou       = torch.mean(tps_a / (tps_a + fps_a + fns_a + EPS))
+            dice      = torch.mean((2 * tps_a) / (2 * tps_a + fps_a + fns_a + EPS))
+            precision = torch.mean(tps_a / (tps_a + fps_a + EPS))
+            recall    = torch.mean(tps_a / (tps_a + fns_a + EPS))
 
     f1 = (2 * precision * recall) / (precision + recall + EPS)
 
@@ -170,7 +189,7 @@ def multiclass_soft_metrics(
         logits : torch.Tensor,
         targets : torch.Tensor,
         ignore_background:bool = False,
-        smooth : Union[int, float] = 1e-15):
+        smooth : Union[int, float] = 1e-6):
     """
     Computes Dice Loss for multi-class segmentation.
     Args:
@@ -196,6 +215,7 @@ def multiclass_soft_metrics(
         classes = range(num_classes)
 
     compute_metrics = {}
+    num_active = 0
 
     for c in classes:  # Loop through each class
         pred_c = pred[:, c]  # Predictions for class c
@@ -204,17 +224,27 @@ def multiclass_soft_metrics(
         intersection : torch.Tensor = (pred_c * target_c).sum(dim=(1, 2))  # Element-wise multiplication
         union : torch.Tensor = pred_c.sum(dim=(1, 2)) + target_c.sum(dim=(1, 2))  # Sum of all pixels
 
-        iou_c = ((intersection + smooth) / (union - intersection + smooth)).mean()
+        if target_c.sum() > 0:
+            iou_c = ((intersection + smooth) / (union - intersection + smooth)).mean()
+            dice_c = ((2. * intersection + smooth) / (union + smooth)).mean()
+            iou += iou_c
+            dice += dice_c
+            num_active += 1
+        else:
+            # Class absent from GT — return NaN so callers can use np.nanmean
+            # and skip these images rather than treating them as IoU=0.
+            iou_c  = torch.tensor(float("nan"))
+            dice_c = torch.tensor(float("nan"))
+
         compute_metrics["IoU_class_" + str(c)] = iou_c
-        iou += iou_c
-
-        dice_c = ((2. * intersection + smooth) / (union + smooth)).mean()
         compute_metrics["DsC_class_"+ str(c)] = dice_c
-        dice += dice_c
 
-    num_active = len(list(classes))
-    compute_metrics["IoU_region"] = iou / num_active
-    compute_metrics["DsC_region"] = dice / num_active
+    if num_active == 0:
+        compute_metrics["IoU_region"] = torch.tensor(1.0)
+        compute_metrics["DsC_region"] = torch.tensor(1.0)
+    else:
+        compute_metrics["IoU_region"] = iou / num_active
+        compute_metrics["DsC_region"] = dice / num_active
 
     # Return metrics
     return compute_metrics
@@ -222,7 +252,7 @@ def multiclass_soft_metrics(
 def get_soft_metrics(
     logits: torch.Tensor,
     targets: torch.Tensor,
-    smooth: Union[int, float] = 1e-15,
+    smooth: Union[int, float] = 1e-6,
     is_binary: bool = True,
     ignore_background: bool = False,
 ) -> Dict[str, float]:
