@@ -1,0 +1,12 @@
+.python-env:
+  stage: build
+  script:
+    - python --version
+    - python -m venv venv
+    - Select the python interpreter
+    - source ~\venv\bin\activate
+    - .\venv\Scripts\activate
+    - ctrl+shift+p to select interpreter venv python.
+    - pip install -r .\requirements-dev.txt
+    - pip install -r .\requirements.txt
+    - pip list

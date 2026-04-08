@@ -1,0 +1,11 @@
+# Data folder
+/data
+
+# Virtual environment
+/venv
+
+# Tensorboard runs
+/runs
+
+# Models
+/models
