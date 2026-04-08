@@ -4,5 +4,8 @@
 # Virtual environment
 /venv
 
+# Tensorboard runs
+/runs
+
 # Models
 /models
