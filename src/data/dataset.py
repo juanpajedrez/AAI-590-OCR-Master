@@ -170,7 +170,7 @@ class TextDetectionDataset(Dataset):
 
     def __getitem__(self, idx):
         '''
-        Returns one sample of data, data and asmk (X, X_mask)
+        Returns one sample of data, data and mask (X, X_mask)
         '''
         # Get the selected image and image id
         sel_coco_image_dict = self.coco_images[idx]
@@ -197,5 +197,9 @@ class TextDetectionDataset(Dataset):
         sel_img, sel_mask = self.get_mask(
             img_name=img_name,
             annotations=sel_annotations)
+
+        # Let's now change the `width` to new width, and `height` to new height
+        sel_coco_image_dict["width"] = self.new_width
+        sel_coco_image_dict["height"] = self.new_height
 
         return sel_img, sel_mask, sel_coco_image_dict

@@ -2,7 +2,7 @@ from pathlib import Path
 from tqdm import tqdm
 import requests
 import zipfile
-from typing import Union, List
+from typing import Union, List, Tuple
 import random
 import json
 from datetime import datetime
@@ -488,3 +488,61 @@ class ObtainSubSample:
             f.write(metadata_text.strip())
 
         print(f"[INFO] Metadata file written to {metadata_path}")
+
+
+def compute_train_mean_std(
+    data_path: Path,
+    dataset_name: str,
+    new_height: int,
+    new_width: int,
+) -> Tuple[List[float], List[float]]:
+    """
+    Compute per-channel mean and std from the training split of a subset dataset.
+    Only training images are used to avoid data leakage into val/test.
+
+    Uses a single memory-efficient pass over the training images:
+    no full dataset is loaded into RAM at once.
+
+    Args:
+        data_path:    Path to the project data folder.
+        dataset_name: Name of the subset dataset folder inside data_path.
+        new_height:   Target image height (must match the resize used at training time).
+        new_width:    Target image width  (must match the resize used at training time).
+
+    Returns:
+        mean: List[float] of length 3 (RGB channels), values in [0, 1].
+        std:  List[float] of length 3 (RGB channels), values in [0, 1].
+    """
+    import torch
+    from PIL import Image
+    from torchvision import transforms as T
+
+    json_path = data_path / dataset_name / "COCO" / "train.json"
+    with open(json_path, "r") as f:
+        coco_dict = json.load(f)
+
+    png_path = data_path / dataset_name / "PNG"
+
+    to_tensor = T.Compose([
+        T.Resize((new_height, new_width)),
+        T.ToTensor(),
+    ])
+
+    # Online single-pass: accumulate sum and sum-of-squares per channel
+    n_pixels = 0
+    running_sum    = torch.zeros(3)
+    running_sum_sq = torch.zeros(3)
+
+    for img_info in tqdm(coco_dict["images"], desc=f"[compute_train_mean_std] scanning {dataset_name}/train"):
+        pil_img = Image.open(png_path / img_info["file_name"]).convert("RGB")
+        t = to_tensor(pil_img)          # (3, H, W), values in [0, 1]
+        n = t.shape[1] * t.shape[2]     # pixels per image
+        running_sum    += t.sum(dim=[1, 2])
+        running_sum_sq += (t ** 2).sum(dim=[1, 2])
+        n_pixels += n
+
+    mean = running_sum / n_pixels
+    # clamp prevents tiny negative variance from floating-point rounding
+    std  = torch.sqrt(torch.clamp(running_sum_sq / n_pixels - mean ** 2, min=0))
+
+    return mean.tolist(), std.tolist()

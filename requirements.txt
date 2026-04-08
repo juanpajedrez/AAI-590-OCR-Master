@@ -28,3 +28,8 @@ seaborn>=0.13
 # ==========================================
 jupyter
 ipykernel
+
+# ==========================================
+# Tensorboard (To load jupyter notebook instances)
+# ==========================================
+setuptools==81.0
