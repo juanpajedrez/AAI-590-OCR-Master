@@ -1,8 +1,8 @@
 # AAI-590 OCR Master — Document Layout & Text Detection
 
-**Author:** Juan Pablo Triana Martinez  
-**Program:** Master of Science in Applied Artificial Intelligence — University of San Diego 
-**Capstone Project:** AAI-590 Machine Learning Capstone (2023–2026)
+* **Author:** Juan Pablo Triana Martinez  
+* **Program:** Master of Science in Applied Artificial Intelligence — University of San Diego
+* **Capstone Project:** AAI-590 Machine Learning Capstone (2023–2026)
 
 ---
 
