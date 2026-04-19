@@ -9,3 +9,6 @@
 
 # Models
 /models
+
+# gradio
+.gradio

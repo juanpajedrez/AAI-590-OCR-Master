@@ -33,3 +33,8 @@ ipykernel
 # Tensorboard (To load jupyter notebook instances)
 # ==========================================
 setuptools==81.0
+
+# ==========================================
+# Gradio (In order to create live DEMO in huggingface)
+# ==========================================
+gradio
