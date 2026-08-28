@@ -7,6 +7,8 @@ Usage example:
     python scripts/train_binary_text.py
     python scripts/train_binary_text.py --epochs 10 --lr 5e-4 --batch_size 16
     python scripts/train_binary_text.py --weight_ce 1.0 --weight_dice 0.5
+    python scripts/train_binary_text.py --loss_fn dice --smooth 1e-7
+    python scripts/train_binary_text.py --loss_fn cross-entropy
     python scripts/train_binary_text.py --dataset_name my_subsample --epochs 20 --reduction micro
 '''
 
@@ -21,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data import get_dataloaders_text_detection
 from src.models import LinknetModel
-from src.training import CombinedLoss, train, create_writer, add_hparams_to_writer, save_model
+from src.training import LOSS_FN_CHOICES, get_loss_fn, train, create_writer, add_hparams_to_writer, save_model
 
 
 def set_seeds(seed: int = 42) -> None:
@@ -99,18 +101,26 @@ if __name__ == "__main__":
                         type=float,
                         default=1e-3,
                         help="Adam optimizer learning rate (default: 1e-3)")
+    parser.add_argument("--loss_fn",
+                        type=str,
+                        default="combined",
+                        choices=list(LOSS_FN_CHOICES),
+                        help="loss function to train against (default: combined). "
+                             "'dice' uses DiceLoss (--smooth applies), "
+                             "'cross-entropy' uses BCEWithLogitsLoss, "
+                             "'combined' uses BCE + Dice (--weight_ce / --weight_dice apply)")
     parser.add_argument("--smooth",
                         type=float,
                         default=1e-7,
-                        help="smoothing factor for DiceLoss (default: 1e-7)")
+                        help="smoothing factor for DiceLoss, used by --loss_fn dice and combined (default: 1e-7)")
     parser.add_argument("--weight_ce",
                         type=float,
                         default=1.0,
-                        help="weight for BCE loss in CombinedLoss (default: 1.0)")
+                        help="weight for BCE loss in CombinedLoss, only used by --loss_fn combined (default: 1.0)")
     parser.add_argument("--weight_dice",
                         type=float,
                         default=0.5,
-                        help="weight for Dice loss in CombinedLoss (default: 0.5)")
+                        help="weight for Dice loss in CombinedLoss, only used by --loss_fn combined (default: 0.5)")
     parser.add_argument("--reduction",
                         type=str,
                         default="macro",
@@ -173,7 +183,15 @@ if __name__ == "__main__":
     print("[INFO] Building LinkNet model (N=1 for binary segmentation)...")
     model = LinknetModel(Cin=3, N=1).to(device)
 
-    loss_fn = CombinedLoss(binary=True, weight_ce=args.weight_ce, weight_dice=args.weight_dice)
+    print(f"[INFO] Using '{args.loss_fn}' loss function...")
+    loss_fn = get_loss_fn(
+        loss_name=args.loss_fn,
+        binary=True,
+        smooth=args.smooth,
+        weight_ce=args.weight_ce,
+        weight_dice=args.weight_dice,
+        ignore_background=False,
+    )
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # ------------------------------------------------------------------ #
@@ -182,7 +200,7 @@ if __name__ == "__main__":
     writer = create_writer(
         experiment_name=args.experiment_name,
         model_name="LinkNet",
-        extra="binary"
+        extra=f"binary_{args.loss_fn}"
     )
 
     # ------------------------------------------------------------------ #

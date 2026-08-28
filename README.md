@@ -150,9 +150,10 @@ python scripts/train_binary_text.py \
 | `--jitter_hue` | | `float` | `0.1` | ColorJitter hue factor |
 | `--epochs` | | `int` | `5` | Training epochs |
 | `--lr` | | `float` | `1e-3` | Adam learning rate |
-| `--smooth` | | `float` | `1e-7` | DiceLoss smoothing factor |
-| `--weight_ce` | | `float` | `1.0` | BCE loss weight in CombinedLoss |
-| `--weight_dice` | | `float` | `0.5` | Dice loss weight in CombinedLoss |
+| `--loss_fn` | | `str` | `combined` | Loss function: `dice`, `cross-entropy` (BCE) or `combined` (BCE + Dice) |
+| `--smooth` | | `float` | `1e-7` | DiceLoss smoothing factor (`dice`, `combined`) |
+| `--weight_ce` | | `float` | `1.0` | BCE loss weight in CombinedLoss (`combined` only) |
+| `--weight_dice` | | `float` | `0.5` | Dice loss weight in CombinedLoss (`combined` only) |
 | `--reduction` | | `str` | `macro` | Metric averaging: `macro` or `micro` |
 | `--seed` | | `int` | `42` | Random seed |
 | `--experiment_name` | | `str` | `DocLayNet_text_detection` | TensorBoard experiment label |
@@ -198,9 +199,10 @@ python scripts/train_semantic_layout.py \
 | `--jitter_hue` | | `float` | `0.1` | ColorJitter hue factor |
 | `--epochs` | | `int` | `5` | Training epochs |
 | `--lr` | | `float` | `1e-3` | Adam learning rate |
-| `--smooth` | | `float` | `1e-7` | DiceLoss smoothing factor |
-| `--weight_ce` | | `float` | `1.0` | CrossEntropy loss weight in CombinedLoss |
-| `--weight_dice` | | `float` | `0.5` | Dice loss weight in CombinedLoss |
+| `--loss_fn` | | `str` | `combined` | Loss function: `dice`, `cross-entropy` or `combined` (CE + Dice) |
+| `--smooth` | | `float` | `1e-7` | DiceLoss smoothing factor (`dice`, `combined`) |
+| `--weight_ce` | | `float` | `1.0` | CrossEntropy loss weight in CombinedLoss (`combined` only) |
+| `--weight_dice` | | `float` | `0.5` | Dice loss weight in CombinedLoss (`combined` only) |
 | `--reduction` | | `str` | `macro` | Metric averaging: `macro` or `micro` |
 | `--no_ignore_background` | | flag | `False` | Include background class (0) in loss & metrics |
 | `--seed` | | `int` | `42` | Random seed |
@@ -244,7 +246,7 @@ Then open `http://localhost:6006` in your browser. All loss curves, per-epoch me
 
 | Module | Description |
 |---|---|
-| `loss.py` | `DiceLoss` — soft Dice loss for binary and multi-class segmentation. `CombinedLoss` — weighted sum of BCE/CrossEntropy and Dice, configurable per task. |
+| `loss.py` | `DiceLoss` — soft Dice loss for binary and multi-class segmentation. `SegCrossEntropyLoss` — BCEWithLogits (binary) / CrossEntropy (multi-class) behind a single signature. `CombinedLoss` — weighted sum of BCE/CrossEntropy and Dice, configurable per task. `get_loss_fn()` — factory that builds any of the three from the `--loss_fn` CLI flag. |
 | `train.py` | `train_step()` / `test_step()` — single-epoch train and eval loops. `train()` — full multi-epoch loop with TensorBoard logging of all metrics. `create_writer()` — creates a timestamped `SummaryWriter`. `add_hparams_to_writer()` — logs hyperparameters to TensorBoard's HParams tab. `save_model()` — saves model `state_dict` to disk. |
 | `evaluate.py` | *(Reserved)* Standalone evaluation utilities for running inference on saved checkpoints. |
 
