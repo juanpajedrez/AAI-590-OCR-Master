@@ -38,3 +38,8 @@ setuptools==81.0
 # Gradio (In order to create live DEMO in huggingface)
 # ==========================================
 gradio
+
+# ==========================================
+# Benchmarking (CPU memory fallback for src/utils/benchmark.py)
+# ==========================================
+psutil>=5.9

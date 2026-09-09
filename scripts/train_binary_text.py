@@ -1,16 +1,25 @@
 '''
 Author: Juan Pablo Triana Martinez
 Date: 2026-03-25
-Script that trains a LinkNet model for binary text segmentation on DocLayNet data.
+Script that trains a segmentation model for binary text segmentation on DocLayNet data.
+The architecture is selectable via --arch (defaults to linknet-resnet).
 
 Usage example:
     python scripts/train_binary_text.py
-    python scripts/train_binary_text.py --epochs 10 --lr 5e-4 --batch_size 16
+    python scripts/train_binary_text.py --arch unet-resnet18
+    python scripts/train_binary_text.py --arch fpn-resnet18 --epochs 10 --lr 5e-4
+    python scripts/train_binary_text.py --arch bisenet-resnet18
+    python scripts/train_binary_text.py --arch swiftnet-resnet18
+    python scripts/train_binary_text.py --arch deeplabv3-mobilenetv2
+    python scripts/train_binary_text.py --arch unet-mobilenetv2
     python scripts/train_binary_text.py --weight_ce 1.0 --weight_dice 0.5
+    python scripts/train_binary_text.py --loss_fn dice --smooth 1e-7
+    python scripts/train_binary_text.py --loss_fn cross-entropy
     python scripts/train_binary_text.py --dataset_name my_subsample --epochs 20 --reduction micro
 '''
 
 import sys
+import time
 import random
 from pathlib import Path
 import argparse
@@ -20,8 +29,9 @@ import torch
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.data import get_dataloaders_text_detection
-from src.models import LinknetModel
-from src.training import CombinedLoss, train, create_writer, add_hparams_to_writer, save_model
+from src.models import build_model, ARCH_CHOICES
+from src.training import LOSS_FN_CHOICES, get_loss_fn, train, create_writer, add_hparams_to_writer, save_model
+from src.utils import benchmark_model, print_benchmark, save_benchmark
 
 
 def set_seeds(seed: int = 42) -> None:
@@ -37,8 +47,15 @@ if __name__ == "__main__":
     #  Argument parser                                                     #
     # ------------------------------------------------------------------ #
     parser = argparse.ArgumentParser(
-        description="Train a LinkNet model for binary text segmentation on DocLayNet."
+        description="Train a segmentation model for binary text segmentation on DocLayNet."
     )
+
+    # --- Architecture arguments ---
+    parser.add_argument("--arch",
+                        type=str,
+                        default="linknet-resnet",
+                        choices=list(ARCH_CHOICES),
+                        help="segmentation architecture to train (default: linknet-resnet)")
 
     # --- Data arguments ---
     parser.add_argument("-dp", "--data_path",
@@ -99,18 +116,26 @@ if __name__ == "__main__":
                         type=float,
                         default=1e-3,
                         help="Adam optimizer learning rate (default: 1e-3)")
+    parser.add_argument("--loss_fn",
+                        type=str,
+                        default="combined",
+                        choices=list(LOSS_FN_CHOICES),
+                        help="loss function to train against (default: combined). "
+                             "'dice' uses DiceLoss (--smooth applies), "
+                             "'cross-entropy' uses BCEWithLogitsLoss, "
+                             "'combined' uses BCE + Dice (--weight_ce / --weight_dice apply)")
     parser.add_argument("--smooth",
                         type=float,
                         default=1e-7,
-                        help="smoothing factor for DiceLoss (default: 1e-7)")
+                        help="smoothing factor for DiceLoss, used by --loss_fn dice and combined (default: 1e-7)")
     parser.add_argument("--weight_ce",
                         type=float,
                         default=1.0,
-                        help="weight for BCE loss in CombinedLoss (default: 1.0)")
+                        help="weight for BCE loss in CombinedLoss, only used by --loss_fn combined (default: 1.0)")
     parser.add_argument("--weight_dice",
                         type=float,
                         default=0.5,
-                        help="weight for Dice loss in CombinedLoss (default: 0.5)")
+                        help="weight for Dice loss in CombinedLoss, only used by --loss_fn combined (default: 0.5)")
     parser.add_argument("--reduction",
                         type=str,
                         default="macro",
@@ -134,10 +159,22 @@ if __name__ == "__main__":
                         help="directory to save the trained model (default: models)")
     parser.add_argument("--model_name",
                         type=str,
-                        default="linknet_binary_text.pth",
-                        help="filename for the saved model, must end in .pth or .pt (default: linknet_binary_text.pth)")
+                        default=None,
+                        help="filename for the saved model, must end in .pth or .pt "
+                             "(default: <arch>_binary_text.pth)")
+
+    # --- Benchmark arguments ---
+    parser.add_argument("--benchmark_dir",
+                        type=str,
+                        default=str(Path("experiments") / "benchmarks"),
+                        help="directory to save the benchmark JSON report "
+                             "(default: experiments/benchmarks)")
 
     args = parser.parse_args()
+
+    # Derive the model file name from the architecture when not provided
+    if args.model_name is None:
+        args.model_name = f"{args.arch.replace('-', '_')}_binary_text.pth"
 
     # ------------------------------------------------------------------ #
     #  Setup                                                               #
@@ -170,10 +207,18 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------ #
     #  Model, loss, optimizer                                              #
     # ------------------------------------------------------------------ #
-    print("[INFO] Building LinkNet model (N=1 for binary segmentation)...")
-    model = LinknetModel(Cin=3, N=1).to(device)
+    print(f"[INFO] Building '{args.arch}' model (N=1 for binary segmentation)...")
+    model = build_model(arch=args.arch, Cin=3, N=1).to(device)
 
-    loss_fn = CombinedLoss(binary=True, weight_ce=args.weight_ce, weight_dice=args.weight_dice)
+    print(f"[INFO] Using '{args.loss_fn}' loss function...")
+    loss_fn = get_loss_fn(
+        loss_name=args.loss_fn,
+        binary=True,
+        smooth=args.smooth,
+        weight_ce=args.weight_ce,
+        weight_dice=args.weight_dice,
+        ignore_background=False,
+    )
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     # ------------------------------------------------------------------ #
@@ -181,14 +226,15 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------ #
     writer = create_writer(
         experiment_name=args.experiment_name,
-        model_name="LinkNet",
-        extra="binary"
+        model_name=args.arch,
+        extra=f"binary_{args.loss_fn}"
     )
 
     # ------------------------------------------------------------------ #
     #  Training                                                            #
     # ------------------------------------------------------------------ #
     print(f"[INFO] Starting binary training for {args.epochs} epoch(s)...")
+    train_start = time.perf_counter()
     results = train(
         model=model,
         train_dataloader=train_dl,
@@ -205,6 +251,28 @@ if __name__ == "__main__":
         binary=True,
         ignore_background=False,
         reduction=args.reduction,
+    )
+    training_time_s = time.perf_counter() - train_start
+    print(f"[INFO] Total training time: {training_time_s:.1f} s "
+          f"({training_time_s / args.epochs:.1f} s/epoch)")
+
+    # ------------------------------------------------------------------ #
+    #  Efficiency benchmark (params, FLOPs, latency, memory)               #
+    # ------------------------------------------------------------------ #
+    print("[INFO] Running efficiency benchmark...")
+    report = benchmark_model(
+        model=model,
+        input_size=(1, 3, args.new_height, args.new_width),
+        device=device,
+        arch_name=args.arch,
+        training_time_s=training_time_s,
+        epochs=args.epochs,
+    )
+    print_benchmark(report)
+    save_benchmark(
+        report=report,
+        target_dir=args.benchmark_dir,
+        file_name=f"{args.arch.replace('-', '_')}_binary_{args.loss_fn}.json",
     )
 
     # ------------------------------------------------------------------ #
